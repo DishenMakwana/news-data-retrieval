@@ -6,6 +6,8 @@ from datetime import datetime
 import requests
 import hashlib
 import time
+import json
+import urllib.request
 
 # Load environment variables
 load_dotenv()
@@ -13,11 +15,13 @@ load_dotenv()
 NEWS_API_KEY = os.getenv("NEWS_API_KEY")
 MONGO_URL = os.getenv("MONGO_URL")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GNEWS_API_KEY = os.getenv("GNEWS_API_KEY")
 
 print("Environment variables loaded successfully.")
 print(f"NEWS_API_KEY: {NEWS_API_KEY}")
 print(f"MONGO_URL: {MONGO_URL}")
 print(f"GEMINI_API_KEY: {GEMINI_API_KEY}")
+print(f"GNEWS_API_KEY: {GNEWS_API_KEY}")
 
 # Initialize clients
 newsapi = NewsApiClient(api_key=NEWS_API_KEY)
@@ -137,9 +141,33 @@ def clear_database():
 
     print("Database cleared successfully.")
 
+def fetch_gnews_top_headlines(category="general", max_results=10):
+    """
+    Fetch top headlines from GNews API and save them to MongoDB.
+    """
+    url = f"https://gnews.io/api/v4/top-headlines?category={category}&lang=en&country=us&max={max_results}&apikey={GNEWS_API_KEY}"
+
+    try:
+        with urllib.request.urlopen(url) as response:
+            data = json.loads(response.read().decode("utf-8"))
+            articles = data.get("articles", [])
+
+            for article in articles:
+                print(f"Title: {article.get('title', '')}")
+                print(f"Description: {article.get('description', '')}")
+
+            if articles:
+                save_to_mongo("gnews_top_headlines", articles)
+                print(f"Saved {len(articles)} GNews articles to MongoDB.")
+            else:
+                print("No articles found in GNews response.")
+    except Exception as e:
+        print(f"Failed to fetch GNews headlines: {e}")
+
 if __name__ == "__main__":
     clear_database()
     fetch_top_headlines()
     fetch_everything("artificial intelligence")
     fetch_sources()
+    fetch_gnews_top_headlines(category="artificial intelligence", max_results=100)
     print("News data fetched and stored in MongoDB successfully.")
