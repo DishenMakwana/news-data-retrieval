@@ -40,7 +40,7 @@ def save_to_mongo(collection_name, data):
         collection.insert_one(data)
 
 def summarize_with_gemini(text):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
     headers = {
         'Content-Type': 'application/json',
         'X-goog-api-key': GEMINI_API_KEY
@@ -88,7 +88,7 @@ def fetch_top_headlines():
         content = article.get('content', '')
         text = f"Title: {title}\nDescription: {description}\nContent: {content}"
         summary = summarize_with_gemini(f"Summarize the following news article:\n{text}")
-        time.sleep(1)
+        time.sleep(15)
         if summary:
             summaries.append({
                 'article_title': title,
@@ -164,10 +164,125 @@ def fetch_gnews_top_headlines(category="general", max_results=10):
     except Exception as e:
         print(f"Failed to fetch GNews headlines: {e}")
 
+def fetch_from_mongo(collection_name, query=None):
+    """
+    Fetch data from MongoDB collection.
+    """
+    collection = db[collection_name]
+    if query:
+        return list(collection.find(query))
+    else:
+        return list(collection.find())
+
+def summarize_newsapi_articles():
+    """
+    Summarize articles fetched from NewsAPI.
+    """
+    articles = fetch_from_mongo("top_headlines")
+    summaries = []
+    
+    for article in articles:
+        author = article.get('author', '')
+        title = article.get('title', '')
+        description = article.get('description', '')
+        content = article.get('content', '')
+        source = article.get('source', {}).get('name')
+        text = f"Title: {title}\nDescription: {description}\nContent: {content} \nAuthor: {author} \nSource: {source}"
+        summary = summarize_with_gemini(f"Summarize the following news article:\n{text}")
+        time.sleep(1)
+
+        if summary:
+            summaries.append({
+                'article_title': title,
+                "author": author,
+                "source": source,
+                'summary': summary,
+                'source': 'top_headlines',
+                'fetched_at': datetime.utcnow()
+            })
+    
+    if summaries:
+        save_to_mongo("summarization_data", summaries)
+        print("NewsAPI articles summarized successfully.")
+    else:
+        print("No summaries generated.")
+
+def summarize_everything_articles():
+    """
+    Summarize articles fetched from NewsAPI's everything endpoint.
+    """
+    articles = fetch_from_mongo("everything")
+    summaries = []
+
+    for article in articles:
+        author = article.get('author', '')
+        title = article.get('title', '')
+        description = article.get('description', '')
+        content = article.get('content', '')
+        source = article.get('source', {}).get('name')
+        text = f"Title: {title}\nDescription: {description}\nContent: {content} \nAuthor: {author} \nSource: {source}"
+        summary = summarize_with_gemini(f"Summarize the following news article:\n{text}")
+        time.sleep(1)
+
+        if summary:
+            summaries.append({
+                'article_title': title,
+                "author": author,
+                "source": source,
+                'summary': summary,
+                'source': f'everything',
+                'fetched_at': datetime.utcnow()
+            })
+
+    if summaries:
+        save_to_mongo("summarization_data", summaries)
+        print(f"Articles related to summarized successfully.")
+    else:
+        print("No summaries generated.")
+
+def summarize_gnews_articles():
+    """
+    Summarize articles fetched from GNews.
+    """
+    articles = fetch_from_mongo("gnews_top_headlines")
+    summaries = []
+
+    for article in articles:
+        title = article.get('title', '')
+        description = article.get('description', '')
+        content = article.get('content', '')
+        source = article.get('source', {}).get('name')
+        text = f"Title: {title}\nDescription: {description}\nContent: {content} \nSource: {source}"
+        summary = summarize_with_gemini(f"Summarize the following news article:\n{text}")
+        time.sleep(1)
+
+        if summary:
+            summaries.append({
+                'article_title': title,
+                'source': source,
+                'summary': summary,
+                'source': 'gnews_top_headlines',
+                'fetched_at': datetime.utcnow()
+            })
+
+    if summaries:
+        save_to_mongo("summarization_data", summaries)
+        print("GNews articles summarized successfully.")
+    else:
+        print("No summaries generated.")
+
 if __name__ == "__main__":
-    clear_database()
+    # clear_database()
+
+    # Fetch news data from various sources
     fetch_top_headlines()
     fetch_everything("artificial intelligence")
     fetch_sources()
     fetch_gnews_top_headlines(category="artificial intelligence", max_results=100)
+
+    # Summarize articles from different sources
+    summarize_newsapi_articles()
+    summarize_everything_articles()
+    summarize_gnews_articles()
+
     print("News data fetched and stored in MongoDB successfully.")
